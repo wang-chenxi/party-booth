@@ -79,6 +79,13 @@
   .lightbox{position:fixed;inset:0;background:#000d;display:none;flex-direction:column;align-items:center;justify-content:center;z-index:50;padding:16px;}
   .lightbox.on{display:flex;}
   .lightbox img{max-width:96%;max-height:74%;border-radius:12px;border:5px solid #fff;}
+  .hostmodal{position:fixed;inset:0;background:#000d;display:none;align-items:center;justify-content:center;z-index:60;padding:20px;}
+  .hostmodal.on{display:flex;}
+  .hostmodal .card{background:#0B1430;border:4px solid var(--gold);border-radius:22px;padding:24px;width:min(92vw,420px);display:flex;flex-direction:column;gap:12px;}
+  .hostmodal .htitle{color:var(--gold);font-size:16px;text-align:center;}
+  .hostmodal .hcount{font-family:'Fredoka';font-weight:700;color:#fff;text-align:center;font-size:20px;margin-bottom:4px;}
+  .hostmodal .hnote{font-family:'Fredoka';font-weight:600;color:#8aa0d6;font-size:13px;text-align:center;line-height:1.5;margin-top:4px;}
+  .btn.wide{width:100%;text-align:center;}
 </style>
 </head>
 <body>
@@ -134,7 +141,6 @@
   <div class="rv-stage"><img id="reviewImg" alt="Your photo"></div>
   <div class="btnrow">
     <button class="btn ghost" id="retakeBtn">Retake</button>
-    <button class="btn primary" id="saveBtn">Save to Photos</button>
     <button class="btn gold" id="doneBtn">Take Another</button>
   </div>
 </section>
@@ -145,7 +151,6 @@
   <div class="empty" id="galleryEmpty" style="display:none;">No photos yet - go snap some!</div>
   <div class="btnrow">
     <button class="btn ghost" id="galBack">Back to Booth</button>
-    <button class="btn primary" id="saveAll">Save All to Photos</button>
   </div>
 </section>
 
@@ -153,8 +158,18 @@
   <img id="lbImg" alt="">
   <div class="btnrow">
     <button class="btn ghost" id="lbClose">Close</button>
-    <button class="btn primary" id="lbSave">Save to Photos</button>
-    <button class="btn danger" id="lbDel">Delete</button>
+  </div>
+</div>
+
+<div class="hostmodal" id="hostModal">
+  <div class="card">
+    <div class="htitle pixel">HOST MENU</div>
+    <div class="hcount" id="hcount">0 photos saved on this iPad</div>
+    <button class="btn primary wide" id="backupBtn">Back Up All to Photos</button>
+    <button class="btn gold wide" id="editTitleBtn">Edit Banner Title</button>
+    <button class="btn danger wide" id="clearBtn">Clear All Photos</button>
+    <button class="btn ghost wide" id="hostClose">Close</button>
+    <div class="hnote">Guests can't save or share — only this menu can. Back up to Photos a few times during the party.</div>
   </div>
 </div>
 
@@ -238,6 +253,7 @@ async function doSnap(){
   try{lastBlob=await capture();
     await dbAdd({id:'p_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),ts:Date.now(),blob:lastBlob});
     $('#reviewImg').src=URL.createObjectURL(lastBlob);show('review');
+    try{const all=await dbAll();if(all.length&&all.length%10===0)setTimeout(()=>toast(all.length+' photos saved - open the gear menu to back up'),1000);}catch(e){}
   }catch(e){toast('Could not capture - try again');}
   btn.classList.remove('busy');
 }
@@ -254,6 +270,7 @@ async function saveAll(){
   if(navigator.canShare&&navigator.canShare({files})){try{await navigator.share({files,title:'Party Quest Photos'});return;}catch(e){if(e.name==='AbortError')return;}}
   toast('Saving individually...');for(const r of all){await saveOne(r.blob);}
 }
+async function updateCount(){const all=await dbAll();$('#hcount').textContent=all.length+(all.length===1?' photo':' photos')+' saved on this iPad';}
 async function openGallery(){
   const all=await dbAll();const grid=$('#grid');grid.innerHTML='';
   $('#galleryEmpty').style.display=all.length?'none':'grid';
@@ -269,13 +286,13 @@ $('#orientBtn').onclick=()=>setOrient(orient==='landscape'?'portrait':'landscape
 $('#galleryBtn').onclick=openGallery;
 $('#retakeBtn').onclick=()=>show('booth');
 $('#doneBtn').onclick=()=>show('booth');
-$('#saveBtn').onclick=()=>{if(lastBlob)saveOne(lastBlob);};
 $('#galBack').onclick=()=>show('booth');
-$('#saveAll').onclick=saveAll;
 $('#lbClose').onclick=()=>$('#lightbox').classList.remove('on');
-$('#lbSave').onclick=async()=>{const all=await dbAll();const r=all.find(x=>x.id===lbId);if(r)saveOne(r.blob);};
-$('#lbDel').onclick=async()=>{if(lbId&&confirm('Delete this photo?')){await dbDel(lbId);$('#lightbox').classList.remove('on');openGallery();}};
-$('#gearBtn').onclick=()=>{const t=prompt('Banner title for photos:',TITLE);if(t!==null&&t.trim()){setTitleText(t.trim().slice(0,18));renderFrame();}};
+$('#gearBtn').onclick=async()=>{await updateCount();$('#hostModal').classList.add('on');};
+$('#hostClose').onclick=()=>$('#hostModal').classList.remove('on');
+$('#backupBtn').onclick=saveAll;
+$('#editTitleBtn').onclick=()=>{const t=prompt('Banner title for photos:',TITLE);if(t!==null&&t.trim()){setTitleText(t.trim().slice(0,18));renderFrame();}};
+$('#clearBtn').onclick=async()=>{const all=await dbAll();if(!all.length){toast('No photos to clear');return;}if(confirm('Delete ALL '+all.length+' photos? Make sure you have backed up to Photos first.')){for(const r of all){await dbDel(r.id);}await updateCount();toast('All photos cleared');}};
 document.addEventListener('gesturestart',e=>e.preventDefault());
 document.addEventListener('touchmove',e=>{if(e.touches.length>1)e.preventDefault();},{passive:false});
 </script>
